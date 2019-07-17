@@ -219,9 +219,13 @@ def initialize_male(bird_id, bird_strategy, travel_times):
             "staying_time_data": numpy.array([0.0, 0.0, 0.0]),
             "repairing_time_data": numpy.array([0.0, 0.0, 0.0]),
             "marauding_time_data": numpy.array([0.0, 0.0, 0.0]),
-            "traveling_time_data": numpy.array([0.0, 0.0, 0.0])
+            "traveling_time_data": numpy.array([0.0, 0.0, 0.0]),
+            "mar_attempts": numpy.empty((0,3)),
+            "mate_attempts": numpy.empty((0,3))
             }
     return(bird)
+
+
 
 def initialize_female(female_id, males):
     #initialize dictionary
@@ -233,7 +237,7 @@ def initialize_female(female_id, males):
             }
     return(female_bird)
 
-# this is the most important function!
+# this is the most important function! 
 def read_ticket(tic, travel_times):
     global birds
     global t_max
@@ -243,27 +247,70 @@ def read_ticket(tic, travel_times):
     elif tic["action"] == "travel to maraud":
         # check whether the target is at home
         go_maraud = True
+        state_str = ""
         if birds[tic["target"]]["current_state"] in ("staying at bower", "repairing bower"):
             go_maraud = False
+            state_str = "present"
         if birds[tic["target"]]["bower_state"] < 0.0:
             go_maraud = False
+            state_str = state_str + "destroyed"
         if go_maraud: # maraud
             action_maraud(tic["owner"], tic["target"], tic["end_time"])
+            state_str="marauded"
         else: # go back
             action_travel_from_maraud(tic["owner"], tic["target"], tic["end_time"], travel_times)
+        data_pt = numpy.array([[tic["owner"], tic["end_time"], state_str]])
+        birds[tic["target"]]["mar_attempts"] = numpy.concatenate((birds[tic["target"]]["mar_attempts"], data_pt))
     elif tic["action"] == "marauding":
         # travel back
         action_travel_from_maraud(tic["owner"], tic["target"], tic["end_time"], travel_times)
     elif tic["action"] == "mating attempt":
+        state_str = ""
         if birds[tic["target"]]["current_state"] == "staying at bower": #if male is at bower and it is intact
             birds[tic["target"]]["successful_mating"] += 1 #successfully mate and stop generating tickets
+            state_str = "mated"
         else:  
-            female_birds[int(tic["owner"][1:])]["already_visited"].append(tic["target"]) #update the female's already_visited list
+            if birds[tic["target"]]["current_state"] not in ("staying at bower", "repairing bower"):
+                state_str = "absent"
+            if birds[tic["target"]]["bower_state"] < 0.0:
+                state_str = state_str + "destroyed"
+            female_birds[int(tic["owner"][1:])]["already_visited"].append(tic["target"]) #update the female's already_visited list         
             if tic['end_time'] < t_max:
                 action_mating_attempt(tic["owner"], tic["end_time"], travel_times) #generate a new ticket
+        data_pt = numpy.array([[tic["owner"], tic["end_time"], state_str]])
+        birds[tic["target"]]["mate_attempts"] = numpy.concatenate((birds[tic["target"]]["mate_attempts"], data_pt))
     else:
         1 / 0 # something went horribly wrong
-    
+  
+# def runsimulation(t_max, males, F_per_M, females,female_visit_param, male_dist, bird_speed, FG_tau_mean, FG_tau_std,FG_tau_range, FG_tau_norm_range,FG_k, FG_theta, FG_divisor,RBSB_tau_mean, RBSB_tau_std, RBSB_tau_norm_range, damage_to_bower, max_maraud):
+#     global birds
+#     global timeline
+#     global female_birds
+#     timeline = SortedDict()
+#     # BIRDS
+#     birds = []
+#     female_birds=[]
+#     # initialize positions, travel times and preferences
+#     travel_times = compute_distances_travel_times(male_dist, bird_speed)
+#     for i in range(males):
+#         birds.append(initialize_male(i, 
+#                                      i*max_maraud, #strategy for bird 0 is 0 (guarder) and 1 is max_maraud (marauder)
+#                                      travel_times))
+#         # choose its first action
+#         choose_action(birds[-1], 0.0, travel_times)
+#     #initialize females
+#     for i in range(females): #females
+#         female_id = "F" + str(i)
+#         female_birds.append(initialize_female(female_id, males)) #female IDs start where males end (if there are 10 males, the first female would be 11)
+#         #choose time for initial mating attempt
+#         first_time =  female_visit_param[0] * truncnorm.rvs(female_visit_param[2], female_visit_param[3]) + female_visit_param[1] 
+#         action_mating_attempt(female_id, first_time, travel_times)
+#     # this is the main loop
+#     while len(timeline) > 0:
+#         current_ticket = timeline.popitem(0)
+#         read_ticket(current_ticket[1], travel_times)
+#     return birds
+
 def runsimulation(t_max, males, F_per_M, females,female_visit_param, male_dist, bird_speed, FG_tau_mean, FG_tau_std,FG_tau_range, FG_tau_norm_range,FG_k, FG_theta, FG_divisor,RBSB_tau_mean, RBSB_tau_std, RBSB_tau_norm_range, damage_to_bower, max_maraud):
     global birds
     global timeline
@@ -295,9 +342,7 @@ def runsimulation(t_max, males, F_per_M, females,female_visit_param, male_dist, 
     while len(timeline) > 0:
         current_ticket = timeline.popitem(0)
         read_ticket(current_ticket[1], travel_times)
-    
-    return birds
-            
+    return birds        
             
             
             
