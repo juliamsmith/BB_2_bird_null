@@ -1,0 +1,328 @@
+
+
+first, we list the directories in `to_store`
+
+```{r}
+# library(tidyverse)
+# library(ggplot2)
+# library(ggrepel)
+# 
+# conditions <- list.files("../to_store/")
+# lookup_table <- data.frame()
+# for (my_condition in conditions){
+#   my_condition <- str_remove(my_condition, ".csv") #remove .csv from the file name in order to extract parameters without NA errors
+#   my_condition <- str_remove(my_condition, "results")
+#   # split the string
+#   my_split <- strsplit(my_condition, "_|\\=")[[1]]
+#   #print(my_split)
+#   # extract parameters
+#   num_males <- as.numeric(my_split[9])
+#   num_mar <- as.numeric(my_split[11])
+#   lookup_table <- rbind(lookup_table, data.frame(directory = my_condition, 
+#                                                  strategy = strategy,
+#                                                  repair = repair,
+#                                                  dimension = dimension))
+# }
+```
+
+
+
+
+```{r}
+
+##saves a csv for each condition (for example, with 100 male and 1,000 simulations, this results in 100,000 rows)
+# for (my_condition in conditions){
+#   name<-paste0("results", my_condition) 
+#   assign(name,filter(all_results, directory == my_condition))
+#   write_csv(filter(all_results, directory == my_condition), path = paste0("results",my_condition,'.csv'))
+# }
+
+#UNMOD FROM RACHEL
+# conditions <- list.files("~/Desktop/results") #set to your working directory
+# all_results <- tibble()
+# for (my_condition in conditions){
+#   tmp <- read_csv(paste0("~/Desktop/results/", my_condition))
+#   #tmp <- read_csv(paste0("results",my_condition,'.csv'))
+#   tmp <- tmp %>% select(probability_maraud, successful_mating,
+#                            foraging_hrs, staying_hrs, repairing_hrs,
+#                         marauding_events, marauding_hrs, marauding_events,
+#                         traveling_hrs, rnd_seed, directory)
+#   all_results <- rbind(all_results, tmp)
+# }
+# all_results <- all_results %>% inner_join(lookup_table)
+# all_results <- as.data.frame(all_results)
+# head(all_results)
+
+library(tidyverse)
+library(ggplot2)
+library(ggrepel)
+
+conditions <- list.files(pattern = "\\.csv$")
+all_results <- tibble()
+for (my_condition in conditions){
+  tmp <- read_csv(my_condition)
+  all_results <- rbind(all_results, tmp)
+}
+
+conditions <-str_replace(str_replace(conditions, "results", ""), ".csv", "")
+
+
+```
+
+```{r}
+#Activity budget
+
+res <- filter(all_results, directory=="D_pmar=0.054_dim=100_repair_6")
+
+mar <- filter(res, probability_maraud==0.054)
+gua <- filter(res, probability_maraud==0)
+
+mfg <- mean(mar$foraging_hrs)
+msb <- mean(mar$staying_hrs)
+mrb <- mean(mar$repairing_hrs)
+mm <- mean(mar$traveling_hrs+mar$marauding_hrs)
+mtot <- sum(mfg, msb, mrb, mm)
+
+print(mfg/mtot)
+print(msb/mtot)
+print(mrb/mtot)
+print(mm/mtot)
+
+gfg <- mean(gua$foraging_hrs)
+gsb <- mean(gua$staying_hrs)
+grb <- mean(gua$repairing_hrs)
+gm <- mean(gua$traveling_hrs+gua$marauding_hrs)
+gtot <- sum(gfg, gsb, grb, gm)
+
+print(gfg/gtot)
+print(gsb/gtot)
+print(grb/gtot)
+print(gm/gtot)
+
+```
+
+
+```{r}
+
+num_males <- 2
+# strats <- c(0.054)
+# dists <- c(117.291)
+# times <- c(6)
+# slen<-length(strats)
+# dlen<-length(dists)
+# tlen<-length(times)
+# twelvemat <- matrix(NA, nrow=slen, ncol=length(dists))
+# sixmat <- matrix(NA, nrow=length(strats), ncol=length(dists))
+# meansarr<-array(rep(NA, slen*tlen*dlen), dim=c(slen,tlen,dlen))
+strat=.054
+
+
+
+
+    n_males<-num_males[i]
+    res <- filter(all_results,num_males==n_males)
+    marauders <- filter(res, probability_maraud == strat)
+    guarders <- filter(res, probability_maraud == 0.0)
+    print(t.test(marauders$successful_mating, guarders$successful_mating))
+    print(n_males)
+    print(n_mar)
+    print(paste("variance of marauder matings", var(marauders$successful_mating)))
+    print(paste("variance of guarder matings", var(guarders$successful_mating)))
+  
+
+
+```
+
+
+
+```{r}
+#COLOR
+
+res <- filter(all_results, dimension==100)
+`Marauder or Guarder` <- cut(res$probability_maraud, breaks=c(-1,0,1), labels=c("Guarder","Marauder"), right=TRUE)
+
+res=cbind(res, `Marauder or Guarder`)
+
+
+res$repair <- as.factor(res$repair)
+res$repair <- plyr::revalue(res$repair,
+                                        c("6" = "Repair time = 6 hrs",
+                                          "3" = "Repair time = 3 hrs",
+                                          "1.5" = "Repair time = 1.5 hrs"))
+
+res$strategy <- as.factor(res$strategy)
+res$strategy <- plyr::revalue(res$strategy,
+                                        c("0.027" = "Probability to maraud = 0.027",
+                                          "0.054" = "Probability to maraud = 0.054"))
+
+# Create data frame of means to add mean line to faceted histograms
+mean_matings <- res %>%
+        group_by(`Marauder or Guarder`,strategy,repair) %>%
+        summarise(Mean = mean(successful_mating))
+
+mean_matings <- mean_matings %>% mutate(Label=paste0("  ",round(Mean, 3),"  "))
+
+
+
+ggplot(res, aes(x=successful_mating, fill=`Marauder or Guarder`)) + geom_histogram(binwidth = 1, alpha = 0.4, position = "identity") + xlim(0,20) + geom_vline(data = mean_matings, aes(xintercept = Mean), linetype = "dashed") + facet_grid(strategy ~ repair, scales = "free") + ylab("Frequency") +
+        xlab("Number of successful matings") + theme(legend.title=element_blank()) + geom_text(data = filter(mean_matings, `Marauder or Guarder`=="Guarder"), aes(x = Mean, y = 200, id = repair, label = Label), size = 3, hjust = "right") + geom_text(data = filter(mean_matings, `Marauder or Guarder`=="Marauder"), aes(x = Mean, y = 200, id = repair, label = Label), size = 3, hjust = "left") + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) + theme(legend.title=element_blank()) + scale_fill_manual(values=c("blue", "green"))
+
+ggsave("pretty_plot.pdf")
+
+
+
+```
+
+```{r}
+#B/W
+
+res <- filter(all_results, dimension==100)
+`Marauder or Guarder` <- cut(res$probability_maraud, breaks=c(-1,0,1), labels=c("Guarder","Marauder"), right=TRUE)
+
+res=cbind(res, `Marauder or Guarder`)
+
+
+res$repair <- as.factor(res$repair)
+res$repair <- plyr::revalue(res$repair,
+                                        c("6" = "Repair time = 6 hrs",
+                                          "3" = "Repair time = 3 hrs",
+                                          "1.5" = "Repair time = 1.5 hrs"))
+
+res$strategy <- as.factor(res$strategy)
+res$strategy <- plyr::revalue(res$strategy,
+                                        c("0.027" = "Probability to maraud = 0.027",
+                                          "0.054" = "Probability to maraud = 0.054"))
+
+# Create data frame of means to add mean line to faceted histograms
+mean_matings <- res %>%
+        group_by(`Marauder or Guarder`,strategy,repair) %>%
+        summarise(Mean = mean(successful_mating))
+
+mean_matings <- mean_matings %>% mutate(Label=paste0("  ",round(Mean, 3),"  "))
+
+
+
+ggplot(res, aes(x=successful_mating, fill=`Marauder or Guarder`)) + geom_histogram(binwidth = 1, alpha = 0.4, position = "identity") + xlim(0,20) + geom_vline(data = mean_matings, aes(xintercept = Mean), linetype = "dashed") + facet_grid(strategy ~ repair, scales = "free") + ylab("Frequency") +
+        xlab("Number of successful matings") + theme(legend.title=element_blank()) + geom_text(data = filter(mean_matings, `Marauder or Guarder`=="Guarder"), aes(x = Mean, y = 200, id = repair, label = Label), size = 3, hjust = "right") + geom_text(data = filter(mean_matings, `Marauder or Guarder`=="Marauder"), aes(x = Mean, y = 200, id = repair, label = Label), size = 3, hjust = "left") +theme_bw() + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
+        theme(legend.title=element_blank()) + scale_fill_manual(values=c("gray44", "gray44")) + theme(legend.position = "none")
+
+ggsave("pretty_plot_BW.pdf")
+
+```
+
+```{r}
+
+# t tests within condition
+p_s <- rep(NA, length(conditions))
+diff <- rep(NA, length(conditions))
+i=1
+for(cond in conditions){
+  my_split <- strsplit(cond, "_|\\=")[[1]]
+  strat <- as.numeric(my_split[3])
+  res <- filter(all_results,directory==cond)
+  marauders <- filter(res, probability_maraud == strat)
+  guarders <- filter(res, probability_maraud == 0.0)
+#  print(cond)
+  tt <- t.test(marauders$successful_mating, guarders$successful_mating)
+#  print(tt)
+  p_s[i] <- tt$p.value
+  diff[i] <- tt$estimate[1]
+  i <- i+1
+  #print(paste("variance of marauder matings", var(marauders$successful_mating)))
+  #print(paste("variance of guarder matings", var(guarders$successful_mating)))
+}
+
+#print(sum(diff<9)) #number of times marauder mean greater than 9 (and thus greater than guarder mean)
+#print(sum(p_s>.05/length(conditions))) #number of insignificant p values
+
+#MARAUDER IS ALWAYS SIGNIFICANTLY MORE SUCCESSFUL THAN GUARDER
+
+print(p_s[conditions=="D_pmar=0.054_dim=100_repair_6"])
+print(p_s[conditions=="D_pmar=0.054_dim=1000_repair_6"])
+print(diff[conditions=="D_pmar=0.054_dim=100_repair_6"])
+print(diff[conditions=="D_pmar=0.054_dim=1000_repair_6"])
+```
+
+```{r}
+
+#compare success of marauders at 100m and 1000m, pmar=.054, repair=6hrs
+mar_100 <- filter(all_results,directory=="D_pmar=0.054_dim=100_repair_6" & probability_maraud==.054)
+mar_1000 <- filter(all_results,directory=="D_pmar=0.054_dim=1000_repair_6" & probability_maraud==.054)
+
+print(t.test(mar_100$successful_mating, mar_1000$successful_mating))
+
+#no significant difference between 100 and 1000 m
+
+```
+
+```{r}
+
+#compare success of marauders at 100m and 1000m, pmar=.054, repair=6hrs
+mar_100 <- filter(all_results,dimension==100 & probability_maraud!=0)
+mar_1000 <- filter(all_results,dimension==1000 & probability_maraud!=0)
+
+print(t.test(mar_100$successful_mating, mar_1000$successful_mating))
+
+#no significant difference between 100 and 1000 m
+
+```
+
+```{r}
+
+#compare success of marauders at .027 and .054, dim=100, repair=1.5hrs
+mar_.027 <- filter(all_results,directory=="D_pmar=0.027_dim=100_repair_1.5" & probability_maraud==.027)
+mar_.054 <- filter(all_results,directory=="D_pmar=0.054_dim=100_repair_1.5" & probability_maraud==.054)
+
+print(t.test(mar_.027$successful_mating, mar_.054$successful_mating))
+
+#significant difference between .027 and .054
+
+```
+```{r}
+
+#compare success of marauders at .027 and .054, dim=100, repair=1.5hrs
+mar_.027 <- filter(all_results,directory=="D_pmar=0.027_dim=100_repair_1.5" & probability_maraud==.027)
+mar_.054 <- filter(all_results,directory=="D_pmar=0.054_dim=100_repair_1.5" & probability_maraud==.054)
+
+print(t.test(mar_.027$successful_mating, mar_.054$successful_mating))
+
+#significant difference between .027 and .054
+
+```
+
+```{r}
+# res_mar <- filter(all_results, probability_maraud==.027 & dimension==100)
+# 
+# linearMod4 <- lm(successful_mating ~ repair, res_mar)
+# anova(linearMod4)
+# 
+# #repair time is significant
+# 
+# #DID I DO ANOVA PROPERLY / ARE THE ASSUMPTIONS MET?
+
+```
+
+```{r}
+mar <- filter(all_results, probability_maraud==.027 | probability_maraud==.054)
+
+plot(mar$repair, mar$successful_mating)#, data=filter(all_results, probability_maraud==.027 | probability_maraud==.054))
+
+```
+
+```{r}
+#ME TRYING OUT A MULTIPLE REGRESSION -- IS THIS THE MOST EFFICIENT?  IS IT VALID... check assumptions?
+
+library(car)
+
+# Multiple Linear Regression Example 
+fit <- lm(successful_mating ~ repair + dimension + probability_maraud, data=filter(all_results, probability_maraud==.027 | probability_maraud==.054))
+summary(fit) # show results
+crPlots(fit)
+#THIS SAYS EVEN DIM IS SIGNIFICANT
+#R2 of .06 doesn't seem good tho
+
+
+```
+
+
